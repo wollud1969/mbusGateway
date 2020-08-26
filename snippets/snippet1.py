@@ -126,6 +126,8 @@ class MeterbusSerial(object):
     while (state not in [MeterbusResponseStates.DONE, MeterbusResponseStates.ERROR]):
       c = port.read()
 
+      print("State {}, Octet {}".format(state, c))
+
       if state == MeterbusResponseStates.START1:
         if c == 0x68:
           frameData.append(c)
@@ -198,7 +200,7 @@ class MeterbusSerial(object):
     print(frame['userdata'])
 
     return frame
-    
+
 
 
 
