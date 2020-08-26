@@ -102,6 +102,7 @@ class MeterbusSerial(object):
   def shortFrameRequest(self, cmd, addr):
     chksum = (cmd + addr) & 0x00ff
     msg = bytearray([0x10, cmd, addr, chksum, 0x16])
+    print(msg)
 
     frontendSample()
     frontendRxEnable(False)
