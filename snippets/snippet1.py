@@ -19,7 +19,7 @@ def init():
   wiringpi.wiringPiSetupGpio()
 
   for p in (LOOP_ENABLE, LOOP_DISABLE, 
-            FRONTEND_RESET, FRONTEND_RX_ENABLE, FRONTEND_SAMPLE_HOLD
+            FRONTEND_RESET, FRONTEND_RX_ENABLE, FRONTEND_SAMPLE_HOLD,
             LED_RED, LED_GREEN):
     wiringpi.pinMode(p, wiringpi.OUTPUT)
     wiringpi.digitalWrite(p, 0)
@@ -93,6 +93,9 @@ class MeterbusResponseStates(Enum):
   DONE = 99
   ERROR = 100
 
+def a2h(a):
+    return [ hex(x) for x in a ]
+
 class MeterbusSerial(object):
   def __init__(self):
     self.port = serial.Serial('/dev/ttyAMA0', baudrate=2400, bytesize=8, parity='E', 
@@ -102,14 +105,14 @@ class MeterbusSerial(object):
   def shortFrameRequest(self, cmd, addr):
     chksum = (cmd + addr) & 0x00ff
     msg = bytearray([0x10, cmd, addr, chksum, 0x16])
-    print(msg)
+    print(a2h(msg))
 
     frontendSample()
     frontendRxEnable(False)
 
     self.port.write(msg)
 
-    sleep(0.025)
+    sleep(0.030)
 
     frontendHold()
     frontendRxEnable(True)
@@ -119,13 +122,13 @@ class MeterbusSerial(object):
       'l': 0,
       'c': 0,
       'a': 0,
-      'ci': 0;
+      'ci': 0,
       'userdata': []
     }
     expectedUserDataOctets = 0
     state = MeterbusResponseStates.START1
     while (state not in [MeterbusResponseStates.DONE, MeterbusResponseStates.ERROR]):
-      c = port.read()
+      c = self.port.read()
 
       print("State {}, Octet {}".format(state, c))
 
@@ -194,14 +197,23 @@ class MeterbusSerial(object):
         print('Invalid state')
         state = MeterbusResponseStates.ERROR
 
-    print(frameData)
-    print(hex(frame['c'))    
+    print(a2h(frameData))
+    print(hex(frame['c']))
     print(hex(frame['a']))    
-    print(hex(frame['ci'))    
-    print(frame['userdata'])
+    print(hex(frame['ci']))    
+    print(a2h(frame['userdata']))
 
     return frame
 
 
+
+if __name__ == "__main__":
+    init()
+    loop(False)
+    sleep(5.0)
+    loop(True)
+    sleep(5.0)
+    m = MeterbusSerial()
+    m.shortFrameRequest(0x5b, 84)
 
 
