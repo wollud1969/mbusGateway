@@ -147,14 +147,14 @@ class MeterbusSerial(object):
     expectedUserDataOctets = 0
     state = MeterbusResponseStates.START1
     while (state not in [MeterbusResponseStates.DONE, MeterbusResponseStates.ERROR, MeterbusResponseStates.TIMEOUT]):
-      print("Waiting for input ... ")
+      # print("Waiting for input ... ")
       c = self.port.read(1)
       if len(c) == 0:
         state = MeterbusResponseStates.TIMEOUT
         continue
       c = ord(c)
 
-      print("State {}, Octet 0x{:02X}".format(state, c))
+      # print("State {}, Octet 0x{:02X}".format(state, c))
 
       if state == MeterbusResponseStates.START1:
         if c == 0x68:
@@ -221,7 +221,7 @@ class MeterbusSerial(object):
         print('Invalid state')
         state = MeterbusResponseStates.ERROR
 
-    print(a2h(frameData))
+    # print(a2h(frameData))
 
     res = {}
     if state == MeterbusResponseStates.DONE:
@@ -241,18 +241,34 @@ if __name__ == "__main__":
     m = MeterbusSerial()
     m.open()
 
+    stats = {
+      84: {
+        'ok': 0,
+        'error': 0
+      },
+      87: {
+        'ok': 0,
+        'error': 0
+      },
+      80: {
+        'ok': 0
+        'error': 0
+      }
+    }
+
     while True:
-      for a in [ 84, 87, 80 ]:
-        print("------------")
+      for a in stats.keys():
         r = m.shortFrameRequest(0x5b, a)
         if r['status'] == 'ERROR':
+          stats[a]['error'] += 1
           print("Error, last state was {}, restarting loop".format(r['code']))
           m.close()
           sleep(5)
           m.open()
+        else:
+          stats[a]['ok'] += 1
         sleep(1)
-      print("")
-      print("-----------------------------------------------")
+      print(stats)
       sleep(15)
 
 
