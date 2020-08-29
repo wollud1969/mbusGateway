@@ -141,10 +141,10 @@ class MeterbusSerial(object):
     expectedUserDataOctets = 0
     state = MeterbusResponseStates.START1
     while (state not in [MeterbusResponseStates.DONE, MeterbusResponseStates.ERROR]):
-      # print("Waiting for input ... ")
+      print("Waiting for input ... ")
       c = ord(self.port.read())
 
-      # print("State {}, Octet 0x{:02X}".format(state, c))
+      print("State {}, Octet 0x{:02X}".format(state, c))
 
       if state == MeterbusResponseStates.START1:
         if c == 0x68:
@@ -233,7 +233,7 @@ if __name__ == "__main__":
         sleep(1)
       print("")
       print("-----------------------------------------------")
-      sleep(15)
+      sleep(60)
 
 
 
