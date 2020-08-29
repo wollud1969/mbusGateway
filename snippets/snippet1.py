@@ -114,6 +114,8 @@ class MeterbusSerial(object):
 
     self.port.write(msg)
 
+    # FIXME: Attention, the actual write time of the interface is not considered.
+    #        This is a measured value.
     sleep(0.030)
 
     frontendHold()
@@ -130,6 +132,7 @@ class MeterbusSerial(object):
     expectedUserDataOctets = 0
     state = MeterbusResponseStates.START1
     while (state not in [MeterbusResponseStates.DONE, MeterbusResponseStates.ERROR]):
+      print("Waiting for input ... ")
       c = self.port.read()
 
       print("State {}, Octet {}".format(state, c))
