@@ -223,7 +223,13 @@ class MeterbusSerial(object):
 
     print(a2h(frameData))
 
-    return frame
+    res = {}
+    if state == MeterbusResponseStates.STOP:
+      res = {'status': 'OK', 'frame': frameData, 'c': frame['c'], 'a': frame['a'], 'ci': frame['ci'], 'userdata': frame['userdata']}
+    else:
+      res = {'status': 'ERROR', 'code': state }
+
+    return res
 
 
 
@@ -238,7 +244,12 @@ if __name__ == "__main__":
     while True:
       for a in [ 84, 87, 80 ]:
         print("------------")
-        m.shortFrameRequest(0x5b, a)
+        r = m.shortFrameRequest(0x5b, a)
+        if r['status'] == 'ERROR':
+          print("Error, last state was {}, restarting loop".format(r['code']))
+          m.close()
+          sleep(5)
+          m.open()
         sleep(1)
       print("")
       print("-----------------------------------------------")
