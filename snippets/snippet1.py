@@ -224,7 +224,7 @@ class MeterbusSerial(object):
     print(a2h(frameData))
 
     res = {}
-    if state == MeterbusResponseStates.STOP:
+    if state == MeterbusResponseStates.DONE:
       res = {'status': 'OK', 'frame': frameData, 'c': frame['c'], 'a': frame['a'], 'ci': frame['ci'], 'userdata': frame['userdata']}
     else:
       res = {'status': 'ERROR', 'code': state }
