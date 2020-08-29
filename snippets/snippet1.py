@@ -151,7 +151,8 @@ class MeterbusSerial(object):
       c = self.port.read(1)
       if len(c) == 0:
         state = MeterbusResponseStates.TIMEOUT
-        continue;
+        continue
+      c = ord(c)
 
       print("State {}, Octet 0x{:02X}".format(state, c))
 
