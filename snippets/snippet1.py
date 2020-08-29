@@ -100,6 +100,7 @@ class MeterbusResponseStates(Enum):
   STOP = 10
   DONE = 99
   ERROR = 100
+  TIMEOUT = 101
 
 def a2h(a):
     return [ hex(x) for x in a ]
@@ -107,7 +108,14 @@ def a2h(a):
 class MeterbusSerial(object):
   def __init__(self):
     self.port = serial.Serial('/dev/ttyAMA0', baudrate=2400, bytesize=8, parity='E', 
-                              stopbits=1, timeout=None, xonxoff=0, rtscts=0)
+                              stopbits=1, timeout=1.0, xonxoff=0, rtscts=0)
+
+  def open(self):
+    loop(True)
+    sleep(0.5)
+
+  def close(self):
+    loop(False)
 
   def shortFrameRequest(self, cmd, addr):
     chksum = (cmd + addr) & 0x00ff
@@ -115,8 +123,7 @@ class MeterbusSerial(object):
     print(a2h(msg))
 
     frontendSample()
-    frontendRxEnable(False)
-
+    
     self.port.write(msg)
 
     buf = array.array('h', [0])
@@ -128,8 +135,7 @@ class MeterbusSerial(object):
     sleep(0.001)
 
     frontendHold()
-    frontendRxEnable(True)
-
+    
     frameData = []
     frame = {
       'l': 0,
@@ -140,9 +146,12 @@ class MeterbusSerial(object):
     }
     expectedUserDataOctets = 0
     state = MeterbusResponseStates.START1
-    while (state not in [MeterbusResponseStates.DONE, MeterbusResponseStates.ERROR]):
+    while (state not in [MeterbusResponseStates.DONE, MeterbusResponseStates.ERROR, MeterbusResponseStates.TIMEOUT]):
       print("Waiting for input ... ")
-      c = ord(self.port.read())
+      c = self.port.read(1)
+      if len(c) == 0:
+        state = MeterbusResponseStates.TIMEOUT
+        continue;
 
       print("State {}, Octet 0x{:02X}".format(state, c))
 
@@ -220,8 +229,6 @@ class MeterbusSerial(object):
 if __name__ == "__main__":
     init()
     loop(False)
-    sleep(2.0)
-    loop(True)
     sleep(2.0)
 
     m = MeterbusSerial()
