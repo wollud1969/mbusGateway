@@ -15,6 +15,12 @@ LED_RED = 5
 LED_GREEN = 6
 
 
+def frontendReset():
+  wiringpi.digitalWrite(FRONTEND_RESET, 0)
+  sleep(0.025)
+  wiringpi.digitalWrite(FRONTEND_RESET, 1)
+  sleep(0.5)
+
 def init():
   wiringpi.wiringPiSetupGpio()
 
@@ -27,13 +33,10 @@ def init():
   wiringpi.pinMode(LOOP_STATUS, wiringpi.INPUT)
   wiringpi.pullUpDnControl(LOOP_STATUS, wiringpi.PUD_UP)
 
+  frontendReset()
+
   loop(False)
 
-
-def frontendReset():
-  wiringpi.digitalWrite(FRONTEND_RESET, 0)
-  sleep(0.1)
-  wiringpi.digitalWrite(FRONTEND_RESET, 1)
 
 
 def frontendSample():
@@ -100,7 +103,6 @@ class MeterbusSerial(object):
   def __init__(self):
     self.port = serial.Serial('/dev/ttyAMA0', baudrate=2400, bytesize=8, parity='E', 
                               stopbits=1, timeout=None, xonxoff=0, rtscts=0)
-    frontendReset()
 
   def shortFrameRequest(self, cmd, addr):
     chksum = (cmd + addr) & 0x00ff
