@@ -135,7 +135,7 @@ class MeterbusSerial(object):
       print("Waiting for input ... ")
       c = self.port.read()
 
-      print("State {}, Octet {:02X}".format(state, c))
+      print("State {}, Octet {:02X}".format(state, c[0]))
 
 
 
