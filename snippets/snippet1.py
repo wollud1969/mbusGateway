@@ -89,7 +89,7 @@ class MeterbusResponseStates(Enum):
   START2 = 4
   C_FIELD = 5
   A_FIELD = 6
-  C_FIELD = 7
+  CI_FIELD = 7
   USERDATA = 8
   CHKSUM = 9
   STOP = 10
