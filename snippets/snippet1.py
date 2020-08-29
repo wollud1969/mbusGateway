@@ -120,7 +120,7 @@ class MeterbusSerial(object):
   def shortFrameRequest(self, cmd, addr):
     chksum = (cmd + addr) & 0x00ff
     msg = bytearray([0x10, cmd, addr, chksum, 0x16])
-    print(a2h(msg))
+    # print(a2h(msg))
 
     frontendSample()
     
@@ -251,7 +251,7 @@ if __name__ == "__main__":
         'error': 0
       },
       80: {
-        'ok': 0
+        'ok': 0,
         'error': 0
       }
     }
