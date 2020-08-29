@@ -141,7 +141,7 @@ class MeterbusSerial(object):
       print("Waiting for input ... ")
       c = ord(self.port.read())
 
-      print("State {}, Octet {}".format(state, c))
+      print("State {}, Octet 0x{:02X}".format(state, c))
 
       if state == MeterbusResponseStates.START1:
         if c == 0x68:
