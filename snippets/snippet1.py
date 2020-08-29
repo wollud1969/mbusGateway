@@ -3,6 +3,9 @@ from time import sleep
 import serial
 from enum import Enum
 import array
+import fcntl
+import termios
+
 
 
 LOOP_ENABLE = 18
@@ -119,8 +122,8 @@ class MeterbusSerial(object):
     buf = array.array('h', [0])
     while True:
       fcntl.ioctl(self.port.fileno(), termios.TIOCSERGETLSR, buf, 1)
-        if self.buf[0] & termios.TIOCSER_TEMT:
-          break
+      if buf[0] & termios.TIOCSER_TEMT:
+        break
 
     sleep(0.001)
 
@@ -178,7 +181,7 @@ class MeterbusSerial(object):
         frameData.append(c)
         frame['a'] = c
         state = MeterbusResponseStates.CI_FIELD
-      elif state == MeterbusResponseStates.C_FIELD:
+      elif state == MeterbusResponseStates.CI_FIELD:
         frameData.append(c)
         frame['ci'] = c
         state = MeterbusResponseStates.USERDATA
