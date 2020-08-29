@@ -2,6 +2,8 @@ import wiringpi
 from time import sleep
 import serial
 from enum import Enum
+import array
+
 
 LOOP_ENABLE = 18
 LOOP_DISABLE = 23
@@ -114,9 +116,13 @@ class MeterbusSerial(object):
 
     self.port.write(msg)
 
-    # FIXME: Attention, the actual write time of the interface is not considered.
-    #        This is a measured value.
-    sleep(0.030)
+    buf = array.array('h', [0])
+    while True:
+      fcntl.ioctl(self.port.fileno(), termios.TIOCSERGETLSR, buf, 1)
+        if self.buf[0] & termios.TIOCSER_TEMT:
+          break
+
+    sleep(0.001)
 
     frontendHold()
     frontendRxEnable(True)
