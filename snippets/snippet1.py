@@ -133,7 +133,7 @@ class MeterbusSerial(object):
     state = MeterbusResponseStates.START1
     while (state not in [MeterbusResponseStates.DONE, MeterbusResponseStates.ERROR]):
       print("Waiting for input ... ")
-      c = self.port.read()
+      c = ord(self.port.read())
 
       print("State {}, Octet {}".format(state, c))
 
