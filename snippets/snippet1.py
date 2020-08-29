@@ -232,6 +232,7 @@ if __name__ == "__main__":
     sleep(2.0)
 
     m = MeterbusSerial()
+    m.open()
 
     while True:
       for a in [ 84, 87, 80 ]:
