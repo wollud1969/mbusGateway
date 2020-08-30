@@ -242,53 +242,31 @@ if __name__ == "__main__":
     m = MeterbusSerial()
     m.open()
 
+    devices = [ 84, 87, 86, 85, 82, 81, 83, 80 ]
     stats = {
-      84: {
+      'total': {
         'ok': 0,
         'error': 0
       },
-      87: {
-        'ok': 0,
-        'error': 0
-      },
-      86: {
-        'ok': 0,
-        'error': 0
-      },
-      85: {
-        'ok': 0,
-        'error': 0
-      },
-      82: {
-        'ok': 0,
-        'error': 0
-      },
-      81: {
-        'ok': 0,
-        'error': 0
-      },
-      83: {
-        'ok': 0,
-        'error': 0
-      },
-      80: {
-        'ok': 0,
-        'error': 0
-      }
+      'devices': { x: { 'ok': 0, 'error': 0 } for x in devices }
     }
+    
+
 
     pp = pprint.PrettyPrinter(indent=4)
     while True:
-      for a in stats.keys():
+      for a in devices:
         r = m.shortFrameRequest(0x5b, a)
         if r['status'] == 'ERROR':
-          stats[a]['error'] += 1
+          stats['total']['error'] += 1
+          stats['devices'][a]['error'] += 1
           print("Error for {}, last state was {}, restarting loop".format(a, r['code']))
           m.close()
           sleep(5)
           m.open()
         else:
-          stats[a]['ok'] += 1
+          stats['total']['ok'] += 1
+          stats['devices'][a]['ok'] += 1
         sleep(1)
       pp.pprint(stats)
       print("")
