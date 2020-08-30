@@ -245,6 +245,7 @@ if __name__ == "__main__":
     devices = [ 84, 87, 86, 85, 82, 81, 83, 80 ]
     stats = {
       'total': {
+        'cycles': 0,
         'ok': 0,
         'error': 0
       },
@@ -257,6 +258,7 @@ if __name__ == "__main__":
     while True:
       for a in devices:
         r = m.shortFrameRequest(0x5b, a)
+        stats['total']['cycles'] += 1
         if r['status'] == 'ERROR':
           stats['total']['error'] += 1
           stats['devices'][a]['error'] += 1
