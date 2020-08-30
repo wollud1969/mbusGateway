@@ -5,6 +5,7 @@ from enum import Enum
 import array
 import fcntl
 import termios
+import pprint
 
 
 
@@ -250,25 +251,47 @@ if __name__ == "__main__":
         'ok': 0,
         'error': 0
       },
+      86: {
+        'ok': 0,
+        'error': 0
+      },
+      85: {
+        'ok': 0,
+        'error': 0
+      },
+      82: {
+        'ok': 0,
+        'error': 0
+      },
+      81: {
+        'ok': 0,
+        'error': 0
+      },
+      83: {
+        'ok': 0,
+        'error': 0
+      },
       80: {
         'ok': 0,
         'error': 0
       }
     }
 
+    pp = pprint.PrettyPrinter(indent=4)
     while True:
       for a in stats.keys():
         r = m.shortFrameRequest(0x5b, a)
         if r['status'] == 'ERROR':
           stats[a]['error'] += 1
-          print("Error, last state was {}, restarting loop".format(r['code']))
+          print("Error for {}, last state was {}, restarting loop".format(a, r['code']))
           m.close()
           sleep(5)
           m.open()
         else:
           stats[a]['ok'] += 1
         sleep(1)
-      print(stats)
+      pp.pprint(stats)
+      print("")
       sleep(15)
 
 
