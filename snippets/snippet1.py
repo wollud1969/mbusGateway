@@ -121,7 +121,7 @@ class MeterbusSerial(object):
   def shortFrameRequest(self, cmd, addr):
     chksum = (cmd + addr) & 0x00ff
     msg = bytearray([0x10, cmd, addr, chksum, 0x16])
-    print(a2h(msg))
+    # print(a2h(msg))
 
     frontendSample()
     
@@ -148,14 +148,14 @@ class MeterbusSerial(object):
     expectedUserDataOctets = 0
     state = MeterbusResponseStates.START1
     while (state not in [MeterbusResponseStates.DONE, MeterbusResponseStates.ERROR, MeterbusResponseStates.TIMEOUT]):
-      print("Waiting for input ... ")
+      # print("Waiting for input ... ")
       c = self.port.read(1)
       if len(c) == 0:
         state = MeterbusResponseStates.TIMEOUT
         continue
       c = ord(c)
 
-      print("State {}, Octet 0x{:02X}".format(state, c))
+      # print("State {}, Octet 0x{:02X}".format(state, c))
 
       if state == MeterbusResponseStates.START1:
         if c == 0x68:
