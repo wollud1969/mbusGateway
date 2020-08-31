@@ -380,6 +380,7 @@ void printFrame(bool hexOut, t_longframe *frame) {
     fprintf(stderr, "\n");
     fprintf(stderr, "%02x %02x\n", frame->chksum, frame->stop);
   } else {
+    fprintf(stdout, "%c%c", 0, frame->length1 + 6);
     fprintf(stdout, "%c%c%c%c%c%c%c",
             frame->start1, frame->length1, frame->length2, frame->start2,
             frame->c, frame->a, frame->ci);
@@ -387,6 +388,7 @@ void printFrame(bool hexOut, t_longframe *frame) {
       fprintf(stdout, "%c", frame->userdata[i]);
     }
     fprintf(stdout, "%c%c", frame->chksum, frame->stop);
+    fflush(stdout);
   }
 }
 
@@ -395,11 +397,12 @@ int main(int argc, char *argv[]) {
 
 
   bool hexOut = false;
+  bool lineMode = false;
   uint8_t addr = 0;
   uint8_t cmd = 0x5b;
 
   int opt;
-  while ((opt = getopt(argc, argv, "hvxc:a:")) != -1) {
+  while ((opt = getopt(argc, argv, "lhvxc:a:")) != -1) {
     switch(opt) {
     case 'h':
       fprintf(stderr, "mbusgw - interface access tool for meterbus gateway\n");
@@ -408,10 +411,20 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "-x      ... Output as hex string in 'human-readable' form\n");
       fprintf(stderr, "-a addr ... Address of device to be queried\n");
       fprintf(stderr, "-c cmd  ... Command to be sent, default is 0x5b\n");
+      fprintf(stderr, "-l      ... Read cmd and addr from stdin unless\n");
+      fprintf(stderr, "            0x00 0x00 is provided and return the\n");
+      fprintf(stderr, "            result on stdout.\n");
+      fprintf(stderr, "            It is preceeds by 0x00 for okay and the\n");
+      fprintf(stderr, "            length.\n");
+      fprintf(stderr, "            In case of an error it will by 0xff followed\n");
+      fprintf(stderr, "            by one octet with an error code\n");
       fprintf(stderr, "\n");
       break;
     case 'v':
       verbose = true;
+      break;
+    case 'l':
+      lineMode = true;
       break;
     case 'x':
       hexOut = true;
@@ -425,29 +438,66 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  fprintf(stderr, "hexOut %d, addr %02x, cmd %02x\n", hexOut, addr, cmd);
 
-  fprintf(stderr, "Opening device\n");
+  if (verbose) {
+    fprintf(stderr, "Opening device\n");
+  }
   int fd = openSerial(DEFAULT_SERIAL_DEVICE, 2400);
   if (fd == -1) {
     myExit(-1);
   }
 
-  fprintf(stderr, "Sending request\n");
-  t_longframe *frame = request(fd, cmd, addr);
-  if (frame) {
-    fprintf(stderr, "received something\n");
-    printFrame(hexOut, frame);
-    free(frame->userdata);
-    frame->userdata = NULL;
-    free(frame);
-    frame = NULL;
+  if (! lineMode) {
+  fprintf(stderr, "Sending request %02x %02x\n", cmd, addr);
+    t_longframe *frame = request(fd, cmd, addr);
+    if (frame) {
+      fprintf(stderr, "received something\n");
+      printFrame(hexOut, frame);
+      free(frame->userdata);
+      frame->userdata = NULL;
+      free(frame);
+      frame = NULL;
+    } else {
+      fprintf(stderr, "some error occured\n");
+      if (! hexOut) {
+        fprintf(stdout, "%c%c", 0xff, 0);
+        fflush(stdout);
+      }
+      myExit(-1);
+    }
   } else {
-    fprintf(stderr, "some error occured\n");
-    myExit(-1);
+    while (1) {
+      fread(&cmd, 1, 1, stdin);
+      fread(&addr, 1, 1, stdin);
+      if ((cmd == 0) && (addr == 0)) {
+        break;
+      }
+      if (verbose) {
+        fprintf(stderr, "%02x %02x\n", cmd, addr);
+      }
+      t_longframe *frame = request(fd, cmd, addr);
+      if (frame) {
+        if (verbose) {
+          fprintf(stderr, "received something\n");
+        }
+        printFrame(false, frame);
+        free(frame->userdata);
+        frame->userdata = NULL;
+        free(frame);
+        frame = NULL;
+      } else {
+        if (verbose) {
+          fprintf(stderr, "some error occured\n");
+        }
+        fprintf(stdout, "%c%c", 0xff, 0);
+        fflush(stdout);
+      }
+    }
   }
 
-  fprintf(stderr, "Closing device\n");
+  if (verbose) {
+    fprintf(stderr, "Closing device\n");
+  }
   closeSerial(fd);
 }
 
