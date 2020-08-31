@@ -4,6 +4,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <errno.h>
+#include <termios.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <string.h>
+
 
 
 #define LOOP_ENABLE 18
@@ -16,6 +22,7 @@
 #define LED_RED 5
 #define LED_GREEN 6
 
+#define DEFAULT_SERIAL_DEVICE "/dev/ttyAMA0"
 
 typedef struct {
   uint8_t start1;
@@ -47,9 +54,16 @@ typedef enum {
   e_TIMEOUT
 } t_state;
 
+
+int serialFd;
+bool verbose = false;
+
+
 void msleep(uint32_t t) {
   usleep(t * 1000);
 }
+
+
 
 void frontendReset() {
   digitalWrite(FRONTEND_RESET, LOW);
@@ -93,6 +107,15 @@ void ledGreen(bool v) {
   }
 }
 
+void myExit(int e) {
+  ledRed(false);
+  ledGreen(false);
+  loopControl(false);
+  frontendSample();
+
+  exit(e);
+}
+
 
 void init() {
   wiringPiSetupGpio();
@@ -121,12 +144,70 @@ void init() {
   frontendReset();
 
   loopControl(false);
-
-  // TODO: initialize serial interface
 }
 
+int openSerial(char *serialDevice, uint32_t speedNum) {
+  int fd = open(serialDevice, O_RDWR | O_NOCTTY | O_SYNC);
+  if (fd < 0) {
+    fprintf(stderr, "Error %d opening serial device %s: %s\n",
+            errno, serialDevice, strerror(errno));
+    return -1;
+  }
 
-t_longframe *request(uint8_t cmd, uint8_t addr) {
+  struct termios tty;
+  if (tcgetattr(fd, &tty) != 0) {
+    fprintf(stderr, "Error %d getting attributes for serial device %s: %s\n",
+            errno, serialDevice, strerror(errno));
+    return -1;
+  }
+
+  int speed;
+  switch (speedNum) {
+  case 1200:
+    speed = B1200;
+    break;
+  case 2400:
+    speed = B2400;
+    break;
+  default:
+    fprintf(stderr, "Speed %d not supported\n", speedNum);
+    return -1;
+  }
+  cfsetospeed(&tty, speed);
+  cfsetispeed(&tty, speed);
+
+  tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
+  tty.c_cflag &= ~(CRTSCTS | CSTOPB | PARODD);
+  tty.c_cflag |= (CLOCAL | CREAD | PARENB);
+
+  tty.c_lflag = 0;
+
+  tty.c_oflag = 0;
+
+  tty.c_cc[VMIN] = 0;
+  tty.c_cc[VTIME] = 50;
+
+  tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+  tty.c_iflag |= IGNBRK;
+  
+  if (tcsetattr(fd, TCSANOW, &tty) != 0) {
+    fprintf(stderr, "Error %d setting attributes for serial device %s: %s\n",
+            errno, serialDevice, strerror(errno));
+    return -1;
+  }
+
+  loopControl(true);
+  msleep(2000);
+
+  return fd;
+}
+
+void closeSerial(int fd) {
+  loopControl(false);
+  close(fd);
+}
+
+t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
   t_longframe *frame = (t_longframe*) malloc(sizeof(t_longframe));
   if (! frame) {
     fprintf(stderr, "Unable to allocate memory for frame\n");
@@ -138,16 +219,24 @@ t_longframe *request(uint8_t cmd, uint8_t addr) {
 
   frontendSample();
 
-  // TODO: serial write 0x10 cmd addr chksum 0x16
+  uint8_t sendBuf[5];
+  sendBuf[0] = 0x10;
+  sendBuf[1] = cmd;
+  sendBuf[2] = addr;
+  sendBuf[3] = chksum;
+  sendBuf[4] = 0x16;
+  write(fd, sendBuf, 5);
 
-  // TODO: wait for transmit finish
-  /*
-    buf = array.array('h', [0])
-    while True:
-      fcntl.ioctl(self.port.fileno(), termios.TIOCSERGETLSR, buf, 1)
-      if buf[0] & termios.TIOCSER_TEMT:
-        break
-  */
+  while (1) {
+    int r;
+    if (ioctl(fd, TIOCSERGETLSR, &r) == -1) {
+      fprintf(stderr, "Error %d getting TIOCSERGETLSR for fd %d: %s\n",
+              errno, fd, strerror(errno));
+    }
+    if (r & TIOCSER_TEMT) {
+      break;
+    }
+  }
 
   msleep(1);
   frontendHold();
@@ -159,12 +248,21 @@ t_longframe *request(uint8_t cmd, uint8_t addr) {
   while ((state != e_DONE) &&
          (state != e_ERROR) &&
          (state != e_TIMEOUT)) {
-    fprintf(stderr, "Waiting for input ...\n");
-    uint8_t c = 0; // TODO: read one octet from serial interface with timeout
-    // TODO: Checkout whether a timeout occured, then set state to e_TIMEOUT
-    // TODO: and issue 'continue' to go to the top of the loop
+     
+    if (verbose) {
+      fprintf(stderr, "Waiting for input ...\n");
+    }
+    uint8_t c;
+    ssize_t s = read(fd, &c, 1);
+    if (s == 0) {
+      fprintf(stderr, "Timeout waiting for input\n");
+      state = e_TIMEOUT;
+      continue;
+    }
 
-    fprintf(stderr, "State %d, Octet %02x\n", state, c);
+    if (verbose) {
+      fprintf(stderr, "State %d, Octet %02x\n", state, c);
+    }
 
     switch(state) {
     case e_START1:
@@ -187,6 +285,7 @@ t_longframe *request(uint8_t cmd, uint8_t addr) {
           fprintf(stderr, "Unable to allocate memory for userdata\n");
           state = e_ERROR;
         }
+        state = e_LENGTH2;
       }
       break;
     case e_LENGTH2:
@@ -195,6 +294,7 @@ t_longframe *request(uint8_t cmd, uint8_t addr) {
         state = e_ERROR;
       } else {
         frame->length2 = c;
+        state = e_START2;
       }
       break;
     case e_START2:
@@ -266,22 +366,92 @@ t_longframe *request(uint8_t cmd, uint8_t addr) {
   return frame;
 }
 
+void printFrame(bool hexOut, t_longframe *frame) {
+  if (hexOut) {
+    fprintf(stderr, "%02x %02x %02x %02x %02x %02x %02x\n",
+            frame->start1, frame->length1, frame->length2, frame->start2,
+            frame->c, frame->a, frame->ci);
+    for (uint8_t i = 0; i < (frame->length1 - 3); i++) {
+      if (i && !(i % 16)) {
+        fprintf(stderr, "\n");
+      }
+      fprintf(stderr, "%02x ", frame->userdata[i]);
+    }
+    fprintf(stderr, "\n");
+    fprintf(stderr, "%02x %02x\n", frame->chksum, frame->stop);
+  } else {
+    fprintf(stdout, "%c%c%c%c%c%c%c",
+            frame->start1, frame->length1, frame->length2, frame->start2,
+            frame->c, frame->a, frame->ci);
+    for (uint8_t i = 0; i < (frame->length1 - 3); i++) {
+      fprintf(stdout, "%c", frame->userdata[i]);
+    }
+    fprintf(stdout, "%c%c", frame->chksum, frame->stop);
+  }
+}
 
-    
-    
-
-      
-      
-      
-
-
-
-
-
-int main(void) {
+int main(int argc, char *argv[]) {
   init();
 
 
+  bool hexOut = false;
+  uint8_t addr = 0;
+  uint8_t cmd = 0x5b;
+
+  int opt;
+  while ((opt = getopt(argc, argv, "hvxc:a:")) != -1) {
+    switch(opt) {
+    case 'h':
+      fprintf(stderr, "mbusgw - interface access tool for meterbus gateway\n");
+      fprintf(stderr, "-h      ... Show this help page\n");
+      fprintf(stderr, "-v      ... Verbose output\n");
+      fprintf(stderr, "-x      ... Output as hex string in 'human-readable' form\n");
+      fprintf(stderr, "-a addr ... Address of device to be queried\n");
+      fprintf(stderr, "-c cmd  ... Command to be sent, default is 0x5b\n");
+      fprintf(stderr, "\n");
+      break;
+    case 'v':
+      verbose = true;
+      break;
+    case 'x':
+      hexOut = true;
+      break;
+    case 'a':
+      addr = (uint8_t) strtol(optarg, NULL, 0);
+      break;
+    case 'c':
+      cmd = (uint8_t) strtol(optarg, NULL, 0);
+      break;
+    }
+  }
+
+  fprintf(stderr, "hexOut %d, addr %02x, cmd %02x\n", hexOut, addr, cmd);
+
+  fprintf(stderr, "Opening device\n");
+  int fd = openSerial(DEFAULT_SERIAL_DEVICE, 2400);
+  if (fd == -1) {
+    myExit(-1);
+  }
+
+  fprintf(stderr, "Sending request\n");
+  t_longframe *frame = request(fd, cmd, addr);
+  if (frame) {
+    fprintf(stderr, "received something\n");
+    printFrame(hexOut, frame);
+    free(frame->userdata);
+    frame->userdata = NULL;
+    free(frame);
+    frame = NULL;
+  } else {
+    fprintf(stderr, "some error occured\n");
+    myExit(-1);
+  }
+
+  fprintf(stderr, "Closing device\n");
+  closeSerial(fd);
 }
+
+
+
 
 
