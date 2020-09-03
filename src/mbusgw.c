@@ -40,15 +40,19 @@ void msleep(uint32_t t) {
 }
 
 
-void _log(bool overwriteVerbose, const char *format, va_list ap) {
+void log(const char *format, va_list ap) {
   va_start(ap, format);
   if (verbose || overwriteVerbose) {
     vfprintf(stderr, format, ap);
   }
   va_end(ap);
 }
-#define log(F, ...) _log(false, F, __VA_ARGS__)
-#define errlog(F, ...) _log(true, F, __VA_ARGS__)
+
+void errlog(const char *format, va_list ap) {
+  va_start(ap, format);
+  vfprintf(stderr, format, ap);
+  va_end(ap);
+}
 
 
 void ledRed(bool v) {
