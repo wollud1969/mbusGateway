@@ -10,33 +10,8 @@
 #include <fcntl.h>
 #include <string.h>
 
+#include "mbusgw.h"
 
-
-#define LOOP_ENABLE 18
-#define LOOP_DISABLE 23
-#define LOOP_STATUS 22
-
-#define FRONTEND_RESET 26
-#define FRONTEND_SAMPLE_HOLD 19
-
-#define LED_RED 5
-#define LED_GREEN 6
-
-#define DEFAULT_SERIAL_DEVICE "/dev/ttyAMA0"
-
-typedef struct {
-  uint8_t start1;
-  uint8_t length1;
-  uint8_t length2;
-  uint8_t start2;
-  uint8_t l;
-  uint8_t c;
-  uint8_t a;
-  uint8_t ci;
-  uint8_t *userdata;
-  uint8_t chksum;
-  uint8_t stop;
-} t_longframe;
 
 typedef enum {
   e_START1,
@@ -57,7 +32,7 @@ typedef enum {
 
 int serialFd;
 bool verbose = false;
-
+bool loopActiveFlag = false;
 
 void msleep(uint32_t t) {
   usleep(t * 1000);
@@ -65,31 +40,6 @@ void msleep(uint32_t t) {
 
 
 
-void frontendReset() {
-  digitalWrite(FRONTEND_RESET, LOW);
-  msleep(25);
-  digitalWrite(FRONTEND_RESET, HIGH);
-  msleep(100);
-}
-
-void loopControl(bool v) {
-  if (v) {
-    digitalWrite(LOOP_ENABLE, HIGH);
-    msleep(25);
-    digitalWrite(LOOP_ENABLE, LOW);
-  } else {
-    digitalWrite(LOOP_DISABLE, HIGH);
-    digitalWrite(LOOP_DISABLE, LOW);
-  }
-}
-
-void frontendSample() {
-  digitalWrite(FRONTEND_SAMPLE_HOLD, LOW);
-}
-
-void frontendHold() {
-  digitalWrite(FRONTEND_SAMPLE_HOLD, HIGH);
-}
 
 void ledRed(bool v) {
   if (v) {
@@ -106,6 +56,39 @@ void ledGreen(bool v) {
     digitalWrite(LED_GREEN, LOW);
   }
 }
+void frontendReset() {
+  digitalWrite(FRONTEND_RESET, LOW);
+  msleep(25);
+  digitalWrite(FRONTEND_RESET, HIGH);
+  msleep(100);
+}
+
+void loopControl(bool v) {
+  if (v) {
+    loopActiveFlag = true;
+    digitalWrite(LOOP_ENABLE, HIGH);
+    msleep(25);
+    digitalWrite(LOOP_ENABLE, LOW);
+  } else {
+    loopActiveFlag = false;
+    digitalWrite(LOOP_DISABLE, HIGH);
+    digitalWrite(LOOP_DISABLE, LOW);
+  }
+}
+
+void frontendSample() {
+  digitalWrite(FRONTEND_SAMPLE_HOLD, LOW);
+}
+
+void frontendHold() {
+  digitalWrite(FRONTEND_SAMPLE_HOLD, HIGH);
+}
+
+void loopFailureISR() {
+  loopActiveFlag = false;
+  ledRed(true);
+}
+
 
 void myExit(int e) {
   ledRed(false);
@@ -140,6 +123,8 @@ void init() {
 
   pinMode(LOOP_STATUS, INPUT);
   pullUpDnControl(LOOP_STATUS, PUD_UP);
+
+  wiringPiISR(LOOP_STATUS, INT_EDGE_RISING, loopFailureISR);
 
   frontendReset();
 
@@ -232,6 +217,8 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
     if (ioctl(fd, TIOCSERGETLSR, &r) == -1) {
       fprintf(stderr, "Error %d getting TIOCSERGETLSR for fd %d: %s\n",
               errno, fd, strerror(errno));
+      errno = ERROR_APP_SPECIFIC_ERROR_FLAG | ERROR_TX_REG_UNACCESSIBLE;
+      return NULL;
     }
     if (r & TIOCSER_TEMT) {
       break;
@@ -355,6 +342,11 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
   }
 
   if ((state == e_ERROR) || (state == e_TIMEOUT)) {
+    if (state == e_ERROR) {
+      errno = ERROR_TX_REG_UNACCESSIBLE | ERROR_STATE_ENGINE;
+    } else if (state == e_TIMEOUT) {
+      errno = ERROR_TX_REG_UNACCESSIBLE | ERROR_TIMEOUT;
+    }
     if (frame->userdata) {
       free(frame->userdata);
       frame->userdata = NULL;
@@ -395,7 +387,9 @@ void printFrame(bool hexOut, t_longframe *frame) {
 int main(int argc, char *argv[]) {
   init();
 
+  ledGreen(true);
 
+  int exitCode = 0;
   bool hexOut = false;
   bool lineMode = false;
   uint8_t addr = 0;
@@ -447,51 +441,64 @@ int main(int argc, char *argv[]) {
     myExit(-1);
   }
 
-  if (! lineMode) {
-  fprintf(stderr, "Sending request %02x %02x\n", cmd, addr);
-    t_longframe *frame = request(fd, cmd, addr);
+
+  while (1) {
+    if (! loopActiveFlag) {
+      fprintf(stderr, "loop is not active, enable it and delay\n");
+      loopControl(true);
+      msleep(2000);
+    }
+
+    if (lineMode) {
+      if (verbose) {
+        fprintf(stderr, "lineMode, waiting for input\n");
+      }
+      fread(&cmd, 1, 1, stdin);
+      fread(&addr, 1, 1, stdin);
+    }
+    if ((cmd == 0) && (addr == 0)) {
+      fprintf(stderr, "termination requested\n");
+      break;
+    }
+
+    if (verbose) {
+      fprintf(stderr, "sending request %02x %02x\n", cmd, addr);
+    }
+    t_longframe *frame = NULL;
+    if (loopActiveFlag) {
+      ledRed(false);
+      frame = request(fd, cmd, addr);
+    } else {
+      fprintf(stderr, "loop is currently inactive, no need to try\n");
+    }
+
     if (frame) {
-      fprintf(stderr, "received something\n");
+      if (verbose) {
+        fprintf(stderr, "received a valid frame\n");
+      }
       printFrame(hexOut, frame);
       free(frame->userdata);
       frame->userdata = NULL;
       free(frame);
       frame = NULL;
     } else {
-      fprintf(stderr, "some error occured\n");
+      ledRed(true);
+      if (! loopActiveFlag) {
+        errno = ERROR_APP_SPECIFIC_ERROR_FLAG | ERROR_LOOP_FAILURE;
+      }
+      fprintf(stderr, "error %04x occured\n", errno);
       if (! hexOut) {
-        fprintf(stdout, "%c%c", 0xff, 0);
+        uint8_t maskedError = (uint8_t)(errno & ~ERROR_APP_SPECIFIC_ERROR_FLAG);
+        fprintf(stdout, "%c%c", maskedError, 0);
         fflush(stdout);
       }
-      myExit(-1);
+      if (! lineMode) {
+        exitCode = -2;
+      }
     }
-  } else {
-    while (1) {
-      fread(&cmd, 1, 1, stdin);
-      fread(&addr, 1, 1, stdin);
-      if ((cmd == 0) && (addr == 0)) {
-        break;
-      }
-      if (verbose) {
-        fprintf(stderr, "%02x %02x\n", cmd, addr);
-      }
-      t_longframe *frame = request(fd, cmd, addr);
-      if (frame) {
-        if (verbose) {
-          fprintf(stderr, "received something\n");
-        }
-        printFrame(false, frame);
-        free(frame->userdata);
-        frame->userdata = NULL;
-        free(frame);
-        frame = NULL;
-      } else {
-        if (verbose) {
-          fprintf(stderr, "some error occured\n");
-        }
-        fprintf(stdout, "%c%c", 0xff, 0);
-        fflush(stdout);
-      }
+
+    if (! lineMode) {
+      break;
     }
   }
 
@@ -499,6 +506,8 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Closing device\n");
   }
   closeSerial(fd);
+
+  myExit(exitCode);
 }
 
 
