@@ -41,6 +41,7 @@ void msleep(uint32_t t) {
 
 
 void infolog(const char *format, ...) {
+  va_list ap;
   va_start(ap, format);
   if (verbose) {
     vfprintf(stderr, format, ap);
@@ -49,6 +50,7 @@ void infolog(const char *format, ...) {
 }
 
 void errlog(const char *format, ...) {
+  va_list ap;
   va_start(ap, format);
   vfprintf(stderr, format, ap);
   va_end(ap);
