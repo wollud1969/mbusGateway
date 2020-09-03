@@ -467,7 +467,7 @@ int main(int argc, char *argv[]) {
 
 
   infolog("opening device\n");
-  int fd = openSerial(DEFAULT_SERIAL_DEVICE, 9600);
+  int fd = openSerial(DEFAULT_SERIAL_DEVICE, 2400);
   if (fd == -1) {
     errlog("unable to open device, fatal error\n");
     myExit(-1);
