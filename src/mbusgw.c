@@ -65,12 +65,10 @@ void frontendReset() {
 
 void loopControl(bool v) {
   if (v) {
-    loopActiveFlag = true;
     digitalWrite(LOOP_ENABLE, HIGH);
     msleep(25);
     digitalWrite(LOOP_ENABLE, LOW);
   } else {
-    loopActiveFlag = false;
     digitalWrite(LOOP_DISABLE, HIGH);
     digitalWrite(LOOP_DISABLE, LOW);
   }
@@ -84,9 +82,11 @@ void frontendHold() {
   digitalWrite(FRONTEND_SAMPLE_HOLD, HIGH);
 }
 
-void loopFailureISR() {
-  loopActiveFlag = false;
-  ledRed(true);
+void loopStatusISR() {
+  loopActiveFlag = digitalRead(LOOP_STATUS) == LOW;
+  if (! loopActiveFlag) {
+    ledRed(true);
+  }
 }
 
 
@@ -101,6 +101,10 @@ void myExit(int e) {
 
 
 void init() {
+  if (verbose) {
+    fprintf(stderr, "setting up gpios\n");
+  }
+
   wiringPiSetupGpio();
 
   pinMode(LOOP_ENABLE, OUTPUT);
@@ -124,7 +128,7 @@ void init() {
   pinMode(LOOP_STATUS, INPUT);
   pullUpDnControl(LOOP_STATUS, PUD_UP);
 
-  wiringPiISR(LOOP_STATUS, INT_EDGE_RISING, loopFailureISR);
+  wiringPiISR(LOOP_STATUS, INT_EDGE_BOTH, loopStatusISR);
 
   frontendReset();
 
@@ -134,14 +138,14 @@ void init() {
 int openSerial(char *serialDevice, uint32_t speedNum) {
   int fd = open(serialDevice, O_RDWR | O_NOCTTY | O_SYNC);
   if (fd < 0) {
-    fprintf(stderr, "Error %d opening serial device %s: %s\n",
+    fprintf(stderr, "error %d opening serial device %s: %s\n",
             errno, serialDevice, strerror(errno));
     return -1;
   }
 
   struct termios tty;
   if (tcgetattr(fd, &tty) != 0) {
-    fprintf(stderr, "Error %d getting attributes for serial device %s: %s\n",
+    fprintf(stderr, "error %d getting attributes for serial device %s: %s\n",
             errno, serialDevice, strerror(errno));
     return -1;
   }
@@ -155,7 +159,7 @@ int openSerial(char *serialDevice, uint32_t speedNum) {
     speed = B2400;
     break;
   default:
-    fprintf(stderr, "Speed %d not supported\n", speedNum);
+    fprintf(stderr, "speed %d not supported\n", speedNum);
     return -1;
   }
   cfsetospeed(&tty, speed);
@@ -176,7 +180,7 @@ int openSerial(char *serialDevice, uint32_t speedNum) {
   tty.c_iflag |= IGNBRK;
   
   if (tcsetattr(fd, TCSANOW, &tty) != 0) {
-    fprintf(stderr, "Error %d setting attributes for serial device %s: %s\n",
+    fprintf(stderr, "error %d setting attributes for serial device %s: %s\n",
             errno, serialDevice, strerror(errno));
     return -1;
   }
@@ -195,7 +199,7 @@ void closeSerial(int fd) {
 t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
   t_longframe *frame = (t_longframe*) malloc(sizeof(t_longframe));
   if (! frame) {
-    fprintf(stderr, "Unable to allocate memory for frame\n");
+    fprintf(stderr, "unable to allocate memory for frame\n");
     return NULL;
   }
   frame->userdata = NULL;
@@ -215,7 +219,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
   while (1) {
     int r;
     if (ioctl(fd, TIOCSERGETLSR, &r) == -1) {
-      fprintf(stderr, "Error %d getting TIOCSERGETLSR for fd %d: %s\n",
+      fprintf(stderr, "error %d getting TIOCSERGETLSR for fd %d: %s\n",
               errno, fd, strerror(errno));
       errno = ERROR_APP_SPECIFIC_ERROR_FLAG | ERROR_TX_REG_UNACCESSIBLE;
       return NULL;
@@ -237,7 +241,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
          (state != e_TIMEOUT)) {
      
     if (verbose) {
-      fprintf(stderr, "Waiting for input ...\n");
+      fprintf(stderr, "waiting for input ...\n");
     }
     uint8_t c;
     ssize_t s = read(fd, &c, 1);
@@ -248,7 +252,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
     }
 
     if (verbose) {
-      fprintf(stderr, "State %d, Octet %02x\n", state, c);
+      fprintf(stderr, "state %d, Octet %02x\n", state, c);
     }
 
     switch(state) {
@@ -257,19 +261,19 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
         frame->start1 = c;
         state = e_LENGTH1;
       } else {
-        fprintf(stderr, "Invalid start1 symbol %02x\n", c);
+        fprintf(stderr, "invalid start1 symbol %02x\n", c);
         state = e_ERROR;
       }
       break;
     case e_LENGTH1:
       if (c <= 3) {
-        fprintf(stderr, "Length to small %02x\n", c);
+        fprintf(stderr, "length to small %02x\n", c);
         state = e_ERROR;
       } else {
         frame->length1 = c;
         frame->userdata = (uint8_t*) malloc(frame->length1 - 3);
         if (! frame->userdata) {
-          fprintf(stderr, "Unable to allocate memory for userdata\n");
+          fprintf(stderr, "unable to allocate memory for userdata\n");
           state = e_ERROR;
         }
         state = e_LENGTH2;
@@ -277,7 +281,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
       break;
     case e_LENGTH2:
       if (frame->length1 != c) {
-        fprintf(stderr, "Invalid length2 %02x vs. %02x\n", frame->length1, c);
+        fprintf(stderr, "invalid length2 %02x vs. %02x\n", frame->length1, c);
         state = e_ERROR;
       } else {
         frame->length2 = c;
@@ -289,7 +293,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
         frame->start2 = c;
         state = e_C_FIELD;
       } else {
-        fprintf(stderr, "Invalid start2 symbol %02x\n", c);
+        fprintf(stderr, "invalid start2 symbol %02x\n", c);
         state = e_ERROR;
       }
       break;
@@ -318,7 +322,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
       break;
     case e_CHKSUM:
       if (c != calculatedChksum) {
-        fprintf(stderr, "Invalid checksum %02x vs %02x\n", calculatedChksum, c);
+        fprintf(stderr, "invalid checksum %02x vs %02x\n", calculatedChksum, c);
         state = e_ERROR;
       } else {
         frame->chksum = c;
@@ -330,12 +334,12 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
         frame->stop = c;
         state = e_DONE;
       } else {
-        fprintf(stderr, "Invalid stop symbol %02x\n", c);
+        fprintf(stderr, "invalid stop symbol %02x\n", c);
         state = e_ERROR;
       }
       break;
     default:
-      fprintf(stderr, "Illegal state %d\n", state);
+      fprintf(stderr, "illegal state %d\n", state);
       state = e_ERROR;
       break;
     }
@@ -434,10 +438,11 @@ int main(int argc, char *argv[]) {
 
 
   if (verbose) {
-    fprintf(stderr, "Opening device\n");
+    fprintf(stderr, "opening device\n");
   }
   int fd = openSerial(DEFAULT_SERIAL_DEVICE, 2400);
   if (fd == -1) {
+    fprintf(stderr, "unable to open device, fatal error\n");
     myExit(-1);
   }
 
@@ -503,7 +508,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (verbose) {
-    fprintf(stderr, "Closing device\n");
+    fprintf(stderr, "closing device\n");
   }
   closeSerial(fd);
 
