@@ -126,6 +126,7 @@ void termHandler(int signum)
 void init() {
   infolog("Register termination handler\n");
   signal(SIGTERM, termHandler);
+  signal(SIGINT, termHandler);
   
   infolog("setting up gpios\n");
 
@@ -181,6 +182,12 @@ int openSerial(char *serialDevice, uint32_t speedNum) {
     break;
   case 2400:
     speed = B2400;
+    break;
+  case 4800:
+    speed = B4800;
+    break;
+  case 9600:
+    speed = B9600;
     break;
   default:
     errlog("speed %d not supported\n", speedNum);
@@ -460,7 +467,7 @@ int main(int argc, char *argv[]) {
 
 
   infolog("opening device\n");
-  int fd = openSerial(DEFAULT_SERIAL_DEVICE, 2400);
+  int fd = openSerial(DEFAULT_SERIAL_DEVICE, 9600);
   if (fd == -1) {
     errlog("unable to open device, fatal error\n");
     myExit(-1);
