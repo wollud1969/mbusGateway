@@ -82,7 +82,7 @@ void frontendReset() {
 void loopControl(bool v) {
   if (v) {
     digitalWrite(LOOP_ENABLE, HIGH);
-    msleep(25);
+    msleep(5);
     digitalWrite(LOOP_ENABLE, LOW);
   } else {
     digitalWrite(LOOP_DISABLE, HIGH);
