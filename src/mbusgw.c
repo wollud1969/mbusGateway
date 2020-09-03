@@ -42,7 +42,7 @@ void msleep(uint32_t t) {
 
 void log(const char *format, va_list ap) {
   va_start(ap, format);
-  if (verbose || overwriteVerbose) {
+  if (verbose) {
     vfprintf(stderr, format, ap);
   }
   va_end(ap);
