@@ -40,7 +40,7 @@ void msleep(uint32_t t) {
 }
 
 
-void log(const char *format, va_list ap) {
+void infolog(const char *format, va_list ap) {
   va_start(ap, format);
   if (verbose) {
     vfprintf(stderr, format, ap);
@@ -115,7 +115,7 @@ void myExit(int e) {
 
 
 void init() {
-  log("setting up gpios\n");
+  infolog("setting up gpios\n");
 
   wiringPiSetupGpio();
 
@@ -252,7 +252,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
          (state != e_ERROR) &&
          (state != e_TIMEOUT)) {
      
-    log("waiting for input ...\n");
+    infolog("waiting for input ...\n");
     uint8_t c;
     ssize_t s = read(fd, &c, 1);
     if (s == 0) {
@@ -261,7 +261,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
       continue;
     }
 
-    log("state %d, Octet %02x\n", state, c);
+    infolog("state %d, Octet %02x\n", state, c);
 
     switch(state) {
     case e_START1:
@@ -445,7 +445,7 @@ int main(int argc, char *argv[]) {
   }
 
 
-  log"opening device\n");
+  infolog"opening device\n");
   int fd = openSerial(DEFAULT_SERIAL_DEVICE, 2400);
   if (fd == -1) {
     errlog("unable to open device, fatal error\n");
@@ -461,7 +461,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (lineMode) {
-      log("lineMode, waiting for input\n");
+      infolog("lineMode, waiting for input\n");
       fread(&cmd, 1, 1, stdin);
       fread(&addr, 1, 1, stdin);
     }
@@ -470,7 +470,7 @@ int main(int argc, char *argv[]) {
       break;
     }
 
-    log("sending request %02x %02x\n", cmd, addr);
+    infolog("sending request %02x %02x\n", cmd, addr);
     t_longframe *frame = NULL;
     if (loopActiveFlag) {
       ledRed(false);
@@ -480,7 +480,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (frame) {
-      log("received a valid frame\n");
+      infolog("received a valid frame\n");
       printFrame(hexOut, frame);
       free(frame->userdata);
       frame->userdata = NULL;
@@ -507,7 +507,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  log("closing device\n");
+  infolog("closing device\n");
   closeSerial(fd);
 
   myExit(exitCode);
