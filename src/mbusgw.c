@@ -9,6 +9,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "mbusgw.h"
 
@@ -39,6 +40,15 @@ void msleep(uint32_t t) {
 }
 
 
+void _log(bool overwriteVerbose, const char *format, va_list ap) {
+  va_start(ap, format);
+  if (verbose || overwriteVerbose) {
+    vfprintf(stderr, format, ap);
+  }
+  va_end(ap);
+}
+#define log(F, ...) _log(false, F, __VA_ARGS__)
+#define errlog(F, ...) _log(true, F, __VA_ARGS__)
 
 
 void ledRed(bool v) {
@@ -101,9 +111,7 @@ void myExit(int e) {
 
 
 void init() {
-  if (verbose) {
-    fprintf(stderr, "setting up gpios\n");
-  }
+  log("setting up gpios\n");
 
   wiringPiSetupGpio();
 
@@ -138,15 +146,15 @@ void init() {
 int openSerial(char *serialDevice, uint32_t speedNum) {
   int fd = open(serialDevice, O_RDWR | O_NOCTTY | O_SYNC);
   if (fd < 0) {
-    fprintf(stderr, "error %d opening serial device %s: %s\n",
-            errno, serialDevice, strerror(errno));
+    errlog("error %d opening serial device %s: %s\n",
+           errno, serialDevice, strerror(errno));
     return -1;
   }
 
   struct termios tty;
   if (tcgetattr(fd, &tty) != 0) {
-    fprintf(stderr, "error %d getting attributes for serial device %s: %s\n",
-            errno, serialDevice, strerror(errno));
+    errlog("error %d getting attributes for serial device %s: %s\n",
+           errno, serialDevice, strerror(errno));
     return -1;
   }
 
@@ -159,7 +167,7 @@ int openSerial(char *serialDevice, uint32_t speedNum) {
     speed = B2400;
     break;
   default:
-    fprintf(stderr, "speed %d not supported\n", speedNum);
+    errlog("speed %d not supported\n", speedNum);
     return -1;
   }
   cfsetospeed(&tty, speed);
@@ -180,8 +188,8 @@ int openSerial(char *serialDevice, uint32_t speedNum) {
   tty.c_iflag |= IGNBRK;
   
   if (tcsetattr(fd, TCSANOW, &tty) != 0) {
-    fprintf(stderr, "error %d setting attributes for serial device %s: %s\n",
-            errno, serialDevice, strerror(errno));
+    errlog("error %d setting attributes for serial device %s: %s\n",
+           errno, serialDevice, strerror(errno));
     return -1;
   }
 
@@ -199,7 +207,7 @@ void closeSerial(int fd) {
 t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
   t_longframe *frame = (t_longframe*) malloc(sizeof(t_longframe));
   if (! frame) {
-    fprintf(stderr, "unable to allocate memory for frame\n");
+    errlog("unable to allocate memory for frame\n");
     return NULL;
   }
   frame->userdata = NULL;
@@ -219,8 +227,8 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
   while (1) {
     int r;
     if (ioctl(fd, TIOCSERGETLSR, &r) == -1) {
-      fprintf(stderr, "error %d getting TIOCSERGETLSR for fd %d: %s\n",
-              errno, fd, strerror(errno));
+      errlog("error %d getting TIOCSERGETLSR for fd %d: %s\n",
+             errno, fd, strerror(errno));
       errno = ERROR_APP_SPECIFIC_ERROR_FLAG | ERROR_TX_REG_UNACCESSIBLE;
       return NULL;
     }
@@ -240,20 +248,16 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
          (state != e_ERROR) &&
          (state != e_TIMEOUT)) {
      
-    if (verbose) {
-      fprintf(stderr, "waiting for input ...\n");
-    }
+    log("waiting for input ...\n");
     uint8_t c;
     ssize_t s = read(fd, &c, 1);
     if (s == 0) {
-      fprintf(stderr, "Timeout waiting for input\n");
+      errlog("timeout waiting for input\n");
       state = e_TIMEOUT;
       continue;
     }
 
-    if (verbose) {
-      fprintf(stderr, "state %d, Octet %02x\n", state, c);
-    }
+    log("state %d, Octet %02x\n", state, c);
 
     switch(state) {
     case e_START1:
@@ -261,19 +265,19 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
         frame->start1 = c;
         state = e_LENGTH1;
       } else {
-        fprintf(stderr, "invalid start1 symbol %02x\n", c);
+        errlog("invalid start1 symbol %02x\n", c);
         state = e_ERROR;
       }
       break;
     case e_LENGTH1:
       if (c <= 3) {
-        fprintf(stderr, "length to small %02x\n", c);
+        errlog("length to small %02x\n", c);
         state = e_ERROR;
       } else {
         frame->length1 = c;
         frame->userdata = (uint8_t*) malloc(frame->length1 - 3);
         if (! frame->userdata) {
-          fprintf(stderr, "unable to allocate memory for userdata\n");
+          errlog("unable to allocate memory for userdata\n");
           state = e_ERROR;
         }
         state = e_LENGTH2;
@@ -281,7 +285,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
       break;
     case e_LENGTH2:
       if (frame->length1 != c) {
-        fprintf(stderr, "invalid length2 %02x vs. %02x\n", frame->length1, c);
+        errlog("invalid length2 %02x vs. %02x\n", frame->length1, c);
         state = e_ERROR;
       } else {
         frame->length2 = c;
@@ -293,7 +297,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
         frame->start2 = c;
         state = e_C_FIELD;
       } else {
-        fprintf(stderr, "invalid start2 symbol %02x\n", c);
+        errlog("invalid start2 symbol %02x\n", c);
         state = e_ERROR;
       }
       break;
@@ -322,7 +326,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
       break;
     case e_CHKSUM:
       if (c != calculatedChksum) {
-        fprintf(stderr, "invalid checksum %02x vs %02x\n", calculatedChksum, c);
+        errlog("invalid checksum %02x vs %02x\n", calculatedChksum, c);
         state = e_ERROR;
       } else {
         frame->chksum = c;
@@ -334,12 +338,12 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
         frame->stop = c;
         state = e_DONE;
       } else {
-        fprintf(stderr, "invalid stop symbol %02x\n", c);
+        errlog("invalid stop symbol %02x\n", c);
         state = e_ERROR;
       }
       break;
     default:
-      fprintf(stderr, "illegal state %d\n", state);
+      errlog("illegal state %d\n", state);
       state = e_ERROR;
       break;
     }
@@ -403,20 +407,20 @@ int main(int argc, char *argv[]) {
   while ((opt = getopt(argc, argv, "lhvxc:a:")) != -1) {
     switch(opt) {
     case 'h':
-      fprintf(stderr, "mbusgw - interface access tool for meterbus gateway\n");
-      fprintf(stderr, "-h      ... Show this help page\n");
-      fprintf(stderr, "-v      ... Verbose output\n");
-      fprintf(stderr, "-x      ... Output as hex string in 'human-readable' form\n");
-      fprintf(stderr, "-a addr ... Address of device to be queried\n");
-      fprintf(stderr, "-c cmd  ... Command to be sent, default is 0x5b\n");
-      fprintf(stderr, "-l      ... Read cmd and addr from stdin unless\n");
-      fprintf(stderr, "            0x00 0x00 is provided and return the\n");
-      fprintf(stderr, "            result on stdout.\n");
-      fprintf(stderr, "            It is preceeds by 0x00 for okay and the\n");
-      fprintf(stderr, "            length.\n");
-      fprintf(stderr, "            In case of an error it will by 0xff followed\n");
-      fprintf(stderr, "            by one octet with an error code\n");
-      fprintf(stderr, "\n");
+      errlog("mbusgw - interface access tool for meterbus gateway\n");
+      errlog("-h      ... Show this help page\n");
+      errlog("-v      ... Verbose output\n");
+      errlog("-x      ... Output as hex string in 'human-readable' form\n");
+      errlog("-a addr ... Address of device to be queried\n");
+      errlog("-c cmd  ... Command to be sent, default is 0x5b\n");
+      errlog("-l      ... Read cmd and addr from stdin unless\n");
+      errlog("            0x00 0x00 is provided and return the\n");
+      errlog("            result on stdout.\n");
+      errlog("            It is preceeds by 0x00 for okay and the\n");
+      errlog("            length.\n");
+      errlog("            In case of an error it will by 0xff followed\n");
+      errlog("            by one octet with an error code\n");
+      errlog("\n");
       break;
     case 'v':
       verbose = true;
@@ -437,50 +441,42 @@ int main(int argc, char *argv[]) {
   }
 
 
-  if (verbose) {
-    fprintf(stderr, "opening device\n");
-  }
+  log"opening device\n");
   int fd = openSerial(DEFAULT_SERIAL_DEVICE, 2400);
   if (fd == -1) {
-    fprintf(stderr, "unable to open device, fatal error\n");
+    errlog("unable to open device, fatal error\n");
     myExit(-1);
   }
 
 
   while (1) {
     if (! loopActiveFlag) {
-      fprintf(stderr, "loop is not active, enable it and delay\n");
+      errlog("loop is not active, enable it and delay\n");
       loopControl(true);
       msleep(2000);
     }
 
     if (lineMode) {
-      if (verbose) {
-        fprintf(stderr, "lineMode, waiting for input\n");
-      }
+      log("lineMode, waiting for input\n");
       fread(&cmd, 1, 1, stdin);
       fread(&addr, 1, 1, stdin);
     }
     if ((cmd == 0) && (addr == 0)) {
-      fprintf(stderr, "termination requested\n");
+      errlog(stderr, "termination requested\n");
       break;
     }
 
-    if (verbose) {
-      fprintf(stderr, "sending request %02x %02x\n", cmd, addr);
-    }
+    log("sending request %02x %02x\n", cmd, addr);
     t_longframe *frame = NULL;
     if (loopActiveFlag) {
       ledRed(false);
       frame = request(fd, cmd, addr);
     } else {
-      fprintf(stderr, "loop is currently inactive, no need to try\n");
+      errlog("loop is currently inactive, no need to try\n");
     }
 
     if (frame) {
-      if (verbose) {
-        fprintf(stderr, "received a valid frame\n");
-      }
+      log("received a valid frame\n");
       printFrame(hexOut, frame);
       free(frame->userdata);
       frame->userdata = NULL;
@@ -491,7 +487,7 @@ int main(int argc, char *argv[]) {
       if (! loopActiveFlag) {
         errno = ERROR_APP_SPECIFIC_ERROR_FLAG | ERROR_LOOP_FAILURE;
       }
-      fprintf(stderr, "error %04x occured\n", errno);
+      errlog("error %04x occured\n", errno);
       if (! hexOut) {
         uint8_t maskedError = (uint8_t)(errno & ~ERROR_APP_SPECIFIC_ERROR_FLAG);
         fprintf(stdout, "%c%c", maskedError, 0);
@@ -507,9 +503,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (verbose) {
-    fprintf(stderr, "closing device\n");
-  }
+  log("closing device\n");
   closeSerial(fd);
 
   myExit(exitCode);
