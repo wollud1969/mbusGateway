@@ -447,7 +447,7 @@ int main(int argc, char *argv[]) {
   }
 
 
-  infolog"opening device\n");
+  infolog("opening device\n");
   int fd = openSerial(DEFAULT_SERIAL_DEVICE, 2400);
   if (fd == -1) {
     errlog("unable to open device, fatal error\n");
@@ -468,7 +468,7 @@ int main(int argc, char *argv[]) {
       fread(&addr, 1, 1, stdin);
     }
     if ((cmd == 0) && (addr == 0)) {
-      errlog(stderr, "termination requested\n");
+      errlog("termination requested\n");
       break;
     }
 
