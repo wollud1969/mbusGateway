@@ -211,6 +211,8 @@ void closeSerial(int fd) {
 }
 
 t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
+  errno = 0;
+  
   t_longframe *frame = (t_longframe*) malloc(sizeof(t_longframe));
   if (! frame) {
     errlog("unable to allocate memory for frame\n");
