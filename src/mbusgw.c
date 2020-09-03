@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <stdarg.h>
+#include <signal.h>
 
 #include "mbusgw.h"
 
@@ -115,8 +116,17 @@ void myExit(int e) {
   exit(e);
 }
 
+void termHandler(int signum)
+{
+   infolog("Termination requested via signal\n");
+   myExit(0);
+}
+
 
 void init() {
+  infolog("Register termination handler\n");
+  signal(SIGTERM, termHandler);
+  
   infolog("setting up gpios\n");
 
   wiringPiSetupGpio();
