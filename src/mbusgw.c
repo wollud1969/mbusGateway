@@ -32,16 +32,15 @@ typedef enum {
 } t_state;
 
 
-int serialFd;
-bool verbose = false;
-bool loopActiveFlag = false;
+static bool verbose = false;
+static bool loopActiveFlag = false;
 
-void msleep(uint32_t t) {
-  usleep(t * 1000);
+static void msleep(uint32_t t) {
+  usleep((useconds_t)(t * 1000));
 }
 
 
-void infolog(const char *format, ...) {
+static void infolog(const char *format, ...) {
   va_list ap;
   va_start(ap, format);
   if (verbose) {
@@ -50,7 +49,7 @@ void infolog(const char *format, ...) {
   va_end(ap);
 }
 
-void errlog(const char *format, ...) {
+static void errlog(const char *format, ...) {
   va_list ap;
   va_start(ap, format);
   vfprintf(stderr, format, ap);
@@ -58,7 +57,7 @@ void errlog(const char *format, ...) {
 }
 
 
-void ledRed(bool v) {
+static void ledRed(bool v) {
   if (v) {
     digitalWrite(LED_RED, HIGH);
   } else {
@@ -66,21 +65,22 @@ void ledRed(bool v) {
   }
 }
 
-void ledGreen(bool v) {
+static void ledGreen(bool v) {
   if (v) {
     digitalWrite(LED_GREEN, HIGH);
   } else {
     digitalWrite(LED_GREEN, LOW);
   }
 }
-void frontendReset() {
+
+static void frontendReset() {
   digitalWrite(FRONTEND_RESET, LOW);
   msleep(25);
   digitalWrite(FRONTEND_RESET, HIGH);
   msleep(100);
 }
 
-void loopControl(bool v) {
+static void loopControl(bool v) {
   if (v) {
     digitalWrite(LOOP_ENABLE, HIGH);
     msleep(5);
@@ -91,15 +91,15 @@ void loopControl(bool v) {
   }
 }
 
-void frontendSample() {
+static void frontendSample() {
   digitalWrite(FRONTEND_SAMPLE_HOLD, LOW);
 }
 
-void frontendHold() {
+static void frontendHold() {
   digitalWrite(FRONTEND_SAMPLE_HOLD, HIGH);
 }
 
-void loopStatusISR() {
+static void loopStatusISR() {
   loopActiveFlag = digitalRead(LOOP_STATUS) == LOW;
   if (! loopActiveFlag) {
     ledRed(true);
@@ -107,23 +107,22 @@ void loopStatusISR() {
 }
 
 
-void myExit(int e) {
+static void deinit() {
   ledRed(false);
   ledGreen(false);
   loopControl(false);
   frontendSample();
-
-  exit(e);
 }
 
-void termHandler(int signum)
+static void termHandler(/*@unused@*/ int signum)
 {
    infolog("Termination requested via signal\n");
-   myExit(0);
+   deinit();
+   exit(EXIT_SUCCESS);
 }
 
 
-void init() {
+static void init() {
   infolog("Register termination handler\n");
   signal(SIGTERM, termHandler);
   signal(SIGINT, termHandler);
@@ -160,7 +159,7 @@ void init() {
   loopControl(false);
 }
 
-int openSerial(char *serialDevice, uint32_t speedNum) {
+static int openSerial(char *serialDevice, uint32_t speedNum) {
   int fd = open(serialDevice, O_RDWR | O_NOCTTY | O_SYNC);
   if (fd < 0) {
     errlog("error %d opening serial device %s: %s\n",
@@ -222,12 +221,12 @@ int openSerial(char *serialDevice, uint32_t speedNum) {
   return fd;
 }
 
-void closeSerial(int fd) {
+static void closeSerial(int fd) {
   loopControl(false);
   close(fd);
 }
 
-t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
+static /*@null@*/ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
   errno = 0;
   
   t_longframe *frame = (t_longframe*) malloc(sizeof(t_longframe));
@@ -235,7 +234,7 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
     errlog("unable to allocate memory for frame\n");
     return NULL;
   }
-  frame->userdata = NULL;
+  memset(frame, 0, sizeof(t_longframe));
 
   uint8_t chksum = cmd + addr;
 
@@ -249,15 +248,20 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
   sendBuf[4] = 0x16;
   write(fd, sendBuf, 5);
 
-  while (1) {
-    int r;
+  while (true) {
+    int r = 0;
     if (ioctl(fd, TIOCSERGETLSR, &r) == -1) {
       errlog("error %d getting TIOCSERGETLSR for fd %d: %s\n",
              errno, fd, strerror(errno));
       errno = ERROR_APP_SPECIFIC_ERROR_FLAG | ERROR_TX_REG_UNACCESSIBLE;
+      if (frame->userdata) {
+        free(frame->userdata);
+      }
+      free(frame);
+      frame = NULL;
       return NULL;
     }
-    if (r & TIOCSER_TEMT) {
+    if ((r & TIOCSER_TEMT) != 0) {
       break;
     }
   }
@@ -300,6 +304,9 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
         state = e_ERROR;
       } else {
         frame->length1 = c;
+        if (frame->userdata) {
+          free(frame->userdata);
+        }
         frame->userdata = (uint8_t*) malloc(frame->length1 - 3);
         if (! frame->userdata) {
           errlog("unable to allocate memory for userdata\n");
@@ -391,13 +398,14 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
   return frame;
 }
 
-void printFrame(bool hexOut, t_longframe *frame) {
+static void printFrame(bool hexOut, t_longframe *frame) {
   if (hexOut) {
     fprintf(stderr, "%02x %02x %02x %02x %02x %02x %02x\n",
             frame->start1, frame->length1, frame->length2, frame->start2,
             frame->c, frame->a, frame->ci);
-    for (uint8_t i = 0; i < (frame->length1 - 3); i++) {
-      if (i && !(i % 16)) {
+    uint8_t i = 0;
+    for (i = 0; i < (frame->length1 - 3); i++) {
+      if ((i != 0) && ((i % 16) == 0)) {
         fprintf(stderr, "\n");
       }
       fprintf(stderr, "%02x ", frame->userdata[i]);
@@ -409,7 +417,8 @@ void printFrame(bool hexOut, t_longframe *frame) {
     fprintf(stdout, "%c%c%c%c%c%c%c",
             frame->start1, frame->length1, frame->length2, frame->start2,
             frame->c, frame->a, frame->ci);
-    for (uint8_t i = 0; i < (frame->length1 - 3); i++) {
+    uint8_t i = 0;
+    for (i = 0; i < (frame->length1 - 3); i++) {
       fprintf(stdout, "%c", frame->userdata[i]);
     }
     fprintf(stdout, "%c%c", frame->chksum, frame->stop);
@@ -470,11 +479,12 @@ int main(int argc, char *argv[]) {
   int fd = openSerial(DEFAULT_SERIAL_DEVICE, 2400);
   if (fd == -1) {
     errlog("unable to open device, fatal error\n");
-    myExit(-1);
+    deinit();
+    exit(EXIT_FAILURE);
   }
 
 
-  while (1) {
+  while (true) {
     if (! loopActiveFlag) {
       errlog("loop is not active, enable it and delay\n");
       loopControl(true);
@@ -531,7 +541,8 @@ int main(int argc, char *argv[]) {
   infolog("closing device\n");
   closeSerial(fd);
 
-  myExit(exitCode);
+  deinit();
+  return exitCode;
 }
 
 
