@@ -6,7 +6,9 @@ LDFLAGS=-lwiringPi
 mbusgw: mbusgw.o
 	$(CC) -o $@ $(LDFLAGS) $^
 
-.c.o:
+mbusgw.o:	mbusgw.c mbusgw.h
+
+%.o : %.c
 	$(CC) $(CFLAGS) -c $<
 
 .PHONY: all
