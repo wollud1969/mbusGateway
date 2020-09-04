@@ -477,12 +477,6 @@ int main(int argc, char *argv[]) {
 
 
   while (1) {
-    if (! loopActiveFlag) {
-      errlog("loop is not active, enable it and delay\n");
-      loopControl(true);
-      msleep(2000);
-    }
-
     if (lineMode) {
       infolog("lineMode, waiting for input\n");
       fread(&cmd, 1, 1, stdin);
@@ -491,6 +485,17 @@ int main(int argc, char *argv[]) {
     if ((cmd == 0) && (addr == 0)) {
       errlog("termination requested\n");
       break;
+    }
+    if ((cmd == 0) && (addr == 1)) {
+      errlog("loop shutdown requested\n");
+      loopControl(false);
+      continue;
+    }
+
+    if (! loopActiveFlag) {
+      errlog("loop is not active, enable it and delay\n");
+      loopControl(true);
+      msleep(2000);
     }
 
     infolog("sending request %02x %02x\n", cmd, addr);
