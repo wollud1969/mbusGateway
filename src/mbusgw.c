@@ -374,6 +374,9 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
         state = e_ERROR;
       }
       break;
+    case e_ERROR:
+      errlog("already error, read the rest (now: %02x) until timeout\n", c);
+      break;
     default:
       errlog("illegal state %d\n", state);
       retCode = ERROR_STATE_ENGINE__ILLEGAL_STATE;
