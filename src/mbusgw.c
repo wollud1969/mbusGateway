@@ -271,7 +271,6 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
   t_state state = e_START1;
 
   while ((state != e_DONE) &&
-         (state != e_ERROR) &&
          (state != e_TIMEOUT)) {
      
     infolog("waiting for input ...\n");
@@ -389,7 +388,9 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
         retCode = ERROR_STATE_ENGINE__UNKNOWN;
       }
     } else if (state == e_TIMEOUT) {
-      retCode = ERROR_TIMEOUT;
+      if (retCode == SUCCESS) {
+        retCode = ERROR_TIMEOUT;
+      }
     }
     if (frame->userdata) {
       free(frame->userdata);
