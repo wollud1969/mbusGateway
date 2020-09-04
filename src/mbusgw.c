@@ -227,13 +227,13 @@ void closeSerial(int fd) {
   close(fd);
 }
 
-t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
-  errno = 0;
-  
+uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
+  uint8_t retCode = 0;
+
   t_longframe *frame = (t_longframe*) malloc(sizeof(t_longframe));
   if (! frame) {
-    errlog("unable to allocate memory for frame\n");
-    return NULL;
+    errlog("unable to allocate memory for frame\n");    
+    return ERROR_OUT_OF_MEMORY;
   }
   frame->userdata = NULL;
 
@@ -254,8 +254,9 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
     if (ioctl(fd, TIOCSERGETLSR, &r) == -1) {
       errlog("error %d getting TIOCSERGETLSR for fd %d: %s\n",
              errno, fd, strerror(errno));
-      errno = ERROR_APP_SPECIFIC_ERROR_FLAG | ERROR_TX_REG_UNACCESSIBLE;
-      return NULL;
+      free(frame);
+      frame = NULL;
+      return ERROR_TX_REG_UNACCESSIBLE;
     }
     if (r & TIOCSER_TEMT) {
       break;
@@ -376,9 +377,9 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
 
   if ((state == e_ERROR) || (state == e_TIMEOUT)) {
     if (state == e_ERROR) {
-      errno = ERROR_TX_REG_UNACCESSIBLE | ERROR_STATE_ENGINE;
+      retCode = ERROR_STATE_ENGINE;
     } else if (state == e_TIMEOUT) {
-      errno = ERROR_TX_REG_UNACCESSIBLE | ERROR_TIMEOUT;
+      retCode = ERROR_TIMEOUT;
     }
     if (frame->userdata) {
       free(frame->userdata);
@@ -388,7 +389,8 @@ t_longframe *request(int fd, uint8_t cmd, uint8_t addr) {
     frame = NULL;
   }
 
-  return frame;
+  *retFrame = frame;
+  return retCode;
 }
 
 void printFrame(bool hexOut, t_longframe *frame) {
@@ -493,14 +495,15 @@ int main(int argc, char *argv[]) {
 
     infolog("sending request %02x %02x\n", cmd, addr);
     t_longframe *frame = NULL;
+    uint8_t requestReturnCode = 0;
     if (loopActiveFlag) {
       ledRed(false);
-      frame = request(fd, cmd, addr);
+      requestReturnCode = request(fd, cmd, addr, &frame);
     } else {
       errlog("loop is currently inactive, no need to try\n");
     }
 
-    if (frame) {
+    if (requestReturnCode == SUCCESS) {
       infolog("received a valid frame\n");
       printFrame(hexOut, frame);
       free(frame->userdata);
@@ -510,11 +513,11 @@ int main(int argc, char *argv[]) {
     } else {
       ledRed(true);
       if (! loopActiveFlag) {
-        errno = ERROR_APP_SPECIFIC_ERROR_FLAG | ERROR_LOOP_FAILURE;
+        requestReturnCode = ERROR_LOOP_FAILURE;
       }
       errlog("error %04x occured\n", errno);
       if (! hexOut) {
-        uint8_t maskedError = (uint8_t)(errno & ~ERROR_APP_SPECIFIC_ERROR_FLAG);
+        uint8_t maskedError = requestReturnCode;
         fprintf(stdout, "%c%c", maskedError, 0);
         fflush(stdout);
       }

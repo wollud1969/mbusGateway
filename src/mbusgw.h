@@ -17,13 +17,12 @@
 #define DEFAULT_SERIAL_DEVICE "/dev/ttyAMA0"
 
 
+#define SUCCESS 0
 #define ERROR_TIMEOUT 1
 #define ERROR_STATE_ENGINE 2
 #define ERROR_LOOP_FAILURE 3
 #define ERROR_TX_REG_UNACCESSIBLE 4
-
-#define ERROR_APP_SPECIFIC_ERROR_FLAG 0x4000
-
+#define ERROR_OUT_OF_MEMORY 5
 
 
 typedef struct {
