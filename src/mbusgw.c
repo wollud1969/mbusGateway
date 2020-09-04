@@ -515,10 +515,9 @@ int main(int argc, char *argv[]) {
       if (! loopActiveFlag) {
         requestReturnCode = ERROR_LOOP_FAILURE;
       }
-      errlog("error %04x occured\n", errno);
+      errlog("error %04x occured\n", requestReturnCode);
       if (! hexOut) {
-        uint8_t maskedError = requestReturnCode;
-        fprintf(stdout, "%c%c", maskedError, 0);
+        fprintf(stdout, "%c%c", requestReturnCode, 0);
         fflush(stdout);
       }
       if (! lineMode) {
