@@ -482,11 +482,11 @@ int main(int argc, char *argv[]) {
       fread(&cmd, 1, 1, stdin);
       fread(&addr, 1, 1, stdin);
     }
-    if ((cmd == 0) && (addr == 0)) {
+    if (lineMode && (cmd == 0) && (addr == 0)) {
       errlog("termination requested\n");
       break;
     }
-    if ((cmd == 0) && (addr == 1)) {
+    if (lineMode && (cmd == 0) && (addr == 1)) {
       errlog("loop shutdown requested\n");
       loopControl(false);
       continue;
