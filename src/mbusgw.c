@@ -233,7 +233,7 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
   t_longframe *frame = (t_longframe*) malloc(sizeof(t_longframe));
   if (! frame) {
     errlog("unable to allocate memory for frame\n");    
-    return ERROR_OUT_OF_MEMORY;
+    return ERROR_OUT_OF_MEMORY__FRAME;
   }
   frame->userdata = NULL;
 
