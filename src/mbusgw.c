@@ -501,6 +501,7 @@ int main(int argc, char *argv[]) {
       requestReturnCode = request(fd, cmd, addr, &frame);
     } else {
       errlog("loop is currently inactive, no need to try\n");
+      requestReturnCode = ERROR_LOOP_FAILURE;
     }
 
     if (requestReturnCode == SUCCESS) {
