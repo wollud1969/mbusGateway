@@ -228,7 +228,7 @@ void closeSerial(int fd) {
 }
 
 uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
-  uint8_t retCode = 0;
+  uint8_t retCode = SUCCESS;
 
   t_longframe *frame = (t_longframe*) malloc(sizeof(t_longframe));
   if (! frame) {
@@ -292,18 +292,21 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
         state = e_LENGTH1;
       } else {
         errlog("invalid start1 symbol %02x\n", c);
+        retCode = ERROR_STATE_ENGINE__START1;
         state = e_ERROR;
       }
       break;
     case e_LENGTH1:
       if (c <= 3) {
         errlog("length to small %02x\n", c);
+        retCode = ERROR_STATE_ENGINE__LENGTH1;
         state = e_ERROR;
       } else {
         frame->length1 = c;
         frame->userdata = (uint8_t*) malloc(frame->length1 - 3);
         if (! frame->userdata) {
           errlog("unable to allocate memory for userdata\n");
+          retCode = ERROR_OUT_OF_MEMORY__USERDATA;
           state = e_ERROR;
         }
         state = e_LENGTH2;
@@ -312,6 +315,7 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
     case e_LENGTH2:
       if (frame->length1 != c) {
         errlog("invalid length2 %02x vs. %02x\n", frame->length1, c);
+        retCode = ERROR_STATE_ENGINE__LENGTH2;
         state = e_ERROR;
       } else {
         frame->length2 = c;
@@ -324,6 +328,7 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
         state = e_C_FIELD;
       } else {
         errlog("invalid start2 symbol %02x\n", c);
+        retCode = ERROR_STATE_ENGINE__START2;
         state = e_ERROR;
       }
       break;
@@ -353,6 +358,7 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
     case e_CHKSUM:
       if (c != calculatedChksum) {
         errlog("invalid checksum %02x vs %02x\n", calculatedChksum, c);
+        retCode = ERROR_STATE_ENGINE__INVALID_CHKSUM;
         state = e_ERROR;
       } else {
         frame->chksum = c;
@@ -365,11 +371,13 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
         state = e_DONE;
       } else {
         errlog("invalid stop symbol %02x\n", c);
+        retCode = ERROR_STATE_ENGINE__STOP;
         state = e_ERROR;
       }
       break;
     default:
       errlog("illegal state %d\n", state);
+      retCode = ERROR_STATE_ENGINE__ILLEGAL_STATE;
       state = e_ERROR;
       break;
     }
@@ -377,7 +385,9 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
 
   if ((state == e_ERROR) || (state == e_TIMEOUT)) {
     if (state == e_ERROR) {
-      retCode = ERROR_STATE_ENGINE;
+      if (retCode == SUCCESS) {
+        retCode = ERROR_STATE_ENGINE__UNKNOWN;
+      }
     } else if (state == e_TIMEOUT) {
       retCode = ERROR_TIMEOUT;
     }
