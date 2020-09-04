@@ -14,6 +14,10 @@ mbusgw.o:	mbusgw.c mbusgw.h
 .PHONY: all
 all:    mbusgw
 
+.PHONY: install
+install: all
+	sudo cp mbusgw /usr/local/bin/
+
 .PHONY: clean
 clean:
 	-rm -f *.o mbusgw

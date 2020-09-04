@@ -16,6 +16,8 @@
 
 #define DEFAULT_SERIAL_DEVICE "/dev/ttyAMA0"
 
+#define BAUDRATE 2400
+
 
 #define SUCCESS 0
 #define ERROR_TIMEOUT 1
