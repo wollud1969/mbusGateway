@@ -35,6 +35,7 @@ typedef enum {
 int serialFd;
 bool verbose = false;
 bool loopActiveFlag = false;
+bool loopEnabled = false;
 
 void msleep(uint32_t t) {
   usleep(t * 1000);
@@ -85,7 +86,9 @@ void loopControl(bool v) {
     digitalWrite(LOOP_ENABLE, HIGH);
     msleep(5);
     digitalWrite(LOOP_ENABLE, LOW);
+    loopEnabled = true;
   } else {
+    loopEnabled = false;
     digitalWrite(LOOP_DISABLE, HIGH);
     digitalWrite(LOOP_DISABLE, LOW);
   }
@@ -101,7 +104,8 @@ void frontendHold() {
 
 void loopStatusISR() {
   loopActiveFlag = digitalRead(LOOP_STATUS) == LOW;
-  if (! loopActiveFlag) {
+  if ((! loopActiveFlag) && (loopEnabled)) {
+    loopEnabled = false;
     ledRed(true);
   }
 }
@@ -375,7 +379,8 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
       }
       break;
     case e_ERROR:
-      errlog("already error, read the rest (now: %02x) until timeout\n", c);
+      ledRed(true);
+      log("already error, read the rest (now: %02x) until timeout\n", c);
       break;
     default:
       errlog("illegal state %d\n", state);
