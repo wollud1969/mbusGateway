@@ -380,7 +380,7 @@ uint8_t request(int fd, uint8_t cmd, uint8_t addr, t_longframe **retFrame) {
       break;
     case e_ERROR:
       ledRed(true);
-      log("already error, read the rest (now: %02x) until timeout\n", c);
+      infolog("already error, read the rest (now: %02x) until timeout\n", c);
       break;
     default:
       errlog("illegal state %d\n", state);
