@@ -501,14 +501,16 @@ int main(int argc, char *argv[]) {
       fread(&cmd, 1, 1, stdin);
       fread(&addr, 1, 1, stdin);
     }
-    if (lineMode && (cmd == 0) && (addr == 0)) {
-      errlog("termination requested\n");
-      break;
-    }
-    if (lineMode && (cmd == 0) && (addr == 1)) {
-      errlog("loop shutdown requested\n");
-      loopControl(false);
-      continue;
+    if (lineMode && (cmd == LINEMODE_CMD_PREFIX)) {
+      if (addr == LINEMODE_CMD_TERMINATE) {
+        infolog("termination requested\n");
+        break;
+      }
+      if (addr == LINEMODE_CMD_LOOP_SHUTDOWN) {
+        infolog("loop shutdown requested\n");
+        loopControl(false);
+        continue;
+      }
     }
 
     if (! loopActiveFlag) {
